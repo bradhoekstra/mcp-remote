@@ -16769,7 +16769,7 @@ var Client = class extends Protocol {
 };
 
 // package.json
-var version2 = "0.1.37";
+var version2 = "0.1.39";
 
 // node_modules/.pnpm/pkce-challenge@5.0.1/node_modules/pkce-challenge/dist/index.node.js
 var crypto;

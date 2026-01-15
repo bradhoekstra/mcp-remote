@@ -24,6 +24,30 @@ import {
 import { StaticOAuthClientInformationFull, StaticOAuthClientMetadata } from './lib/types'
 import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
 import { createLazyAuthCoordinator } from './lib/coordination'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
+
+async function getGcloudAccessToken() {
+  try {
+    const { stdout } = await execAsync('gcloud auth application-default print-access-token')
+    return stdout.trim()
+  } catch (error) {
+    log('Error fetching gcloud token:', error)
+    return null
+  }
+}
+
+async function getGcloudProjectId() {
+  try {
+    const { stdout } = await execAsync('gcloud config get core/project')
+    return stdout.trim()
+  } catch (error) {
+    log('Error fetching gcloud project:', error)
+    return null
+  }
+}
 
 /**
  * Main function to run the proxy
@@ -43,6 +67,26 @@ async function runProxy(
 ) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
+
+  try {
+    const token = await getGcloudAccessToken()
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  } catch (error) {
+    log('Failed to set Authorization header from gcloud:', error)
+  }
+
+  try {
+    const projectId = await getGcloudProjectId()
+    if (projectId) {
+      headers['X-Goog-User-Project'] = projectId
+    }
+  } catch (error) {
+    log('Failed to set X-Goog-User-Project header from gcloud:', error)
+  }
+
+  log(`Headers: ${JSON.stringify(headers)}`)
 
   // Create a lazy auth coordinator
   const authCoordinator = createLazyAuthCoordinator(serverUrlHash, callbackPort, events, authTimeoutMs)

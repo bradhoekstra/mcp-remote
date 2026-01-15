@@ -50,6 +50,7 @@ async function runClient(
   // This probes the MCP server for WWW-Authenticate header and fetches PRM
   log('Discovering OAuth server configuration...')
   const discoveryResult = await discoverOAuthServerInfo(serverUrl, headers)
+  log('Discovered OAuth server configuration...')
 
   if (discoveryResult.protectedResourceMetadata) {
     log(`Discovered authorization server: ${discoveryResult.authorizationServerUrl}`)

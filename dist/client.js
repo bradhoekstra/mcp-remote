@@ -12,7 +12,7 @@ import {
   parseCommandLineArgs,
   setupSignalHandlers,
   version
-} from "./chunk-MTFOE7TE.js";
+} from "./chunk-GZJU7Z6R.js";
 
 // src/client.ts
 import { EventEmitter } from "events";
@@ -21,6 +21,7 @@ async function runClient(serverUrl, callbackPort, headers, transportStrategy = "
   const authCoordinator = createLazyAuthCoordinator(serverUrlHash, callbackPort, events, authTimeoutMs);
   log("Discovering OAuth server configuration...");
   const discoveryResult = await discoverOAuthServerInfo(serverUrl, headers);
+  log("Discovered OAuth server configuration...");
   if (discoveryResult.protectedResourceMetadata) {
     log(`Discovered authorization server: ${discoveryResult.authorizationServerUrl}`);
     if (discoveryResult.protectedResourceMetadata.scopes_supported) {

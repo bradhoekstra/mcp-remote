@@ -10,7 +10,7 @@ import {
   mcpProxy,
   parseCommandLineArgs,
   setupSignalHandlers
-} from "./chunk-MTFOE7TE.js";
+} from "./chunk-GZJU7Z6R.js";
 
 // src/proxy.ts
 import { EventEmitter } from "events";
@@ -111,8 +111,46 @@ var StdioServerTransport = class {
 };
 
 // src/proxy.ts
+import { exec } from "child_process";
+import { promisify } from "util";
+var execAsync = promisify(exec);
+async function getGcloudAccessToken() {
+  try {
+    const { stdout } = await execAsync("gcloud auth application-default print-access-token");
+    return stdout.trim();
+  } catch (error) {
+    log("Error fetching gcloud token:", error);
+    return null;
+  }
+}
+async function getGcloudProjectId() {
+  try {
+    const { stdout } = await execAsync("gcloud config get core/project");
+    return stdout.trim();
+  } catch (error) {
+    log("Error fetching gcloud project:", error);
+    return null;
+  }
+}
 async function runProxy(serverUrl, callbackPort, headers, transportStrategy = "http-first", host, staticOAuthClientMetadata, staticOAuthClientInfo, authorizeResource, ignoredTools, authTimeoutMs, serverUrlHash) {
   const events = new EventEmitter();
+  try {
+    const token = await getGcloudAccessToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  } catch (error) {
+    log("Failed to set Authorization header from gcloud:", error);
+  }
+  try {
+    const projectId = await getGcloudProjectId();
+    if (projectId) {
+      headers["X-Goog-User-Project"] = projectId;
+    }
+  } catch (error) {
+    log("Failed to set X-Goog-User-Project header from gcloud:", error);
+  }
+  log(`Headers: ${JSON.stringify(headers)}`);
   const authCoordinator = createLazyAuthCoordinator(serverUrlHash, callbackPort, events, authTimeoutMs);
   log("Discovering OAuth server configuration...");
   const discoveryResult = await discoverOAuthServerInfo(serverUrl, headers);
