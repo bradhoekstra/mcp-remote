@@ -26,13 +26,19 @@ import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
 import { createLazyAuthCoordinator } from './lib/coordination'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import { GoogleAuth } from 'google-auth-library'
 
 const execAsync = promisify(exec)
 
+const auth = new GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+})
+
 async function getGcloudAccessToken() {
   try {
-    const { stdout } = await execAsync('gcloud auth application-default print-access-token')
-    return stdout.trim()
+    const client = await auth.getClient()
+    const token = await client.getAccessToken()
+    return token.token || null
   } catch (error) {
     log('Error fetching gcloud token:', error)
     return null
@@ -40,6 +46,13 @@ async function getGcloudAccessToken() {
 }
 
 async function getGcloudProjectId() {
+  try {
+    const projectId = await auth.getProjectId()
+    return projectId
+  } catch (error) {
+    log('Error fetching gcloud project:', error)
+  }
+
   try {
     const { stdout } = await execAsync('gcloud config get core/project')
     return stdout.trim()
@@ -67,15 +80,6 @@ async function runProxy(
 ) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
-
-  try {
-    const token = await getGcloudAccessToken()
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-  } catch (error) {
-    log('Failed to set Authorization header from gcloud:', error)
-  }
 
   try {
     const projectId = await getGcloudProjectId()
@@ -121,6 +125,20 @@ async function runProxy(
     protectedResourceMetadata: discoveryResult.protectedResourceMetadata,
     wwwAuthenticateScope: discoveryResult.wwwAuthenticateScope,
   })
+
+  // Wrap the tokens method to prefer Gcloud token if available
+  // This allows for automatic token refreshing when the Gcloud token expires
+  const originalTokensMethod = authProvider.tokens.bind(authProvider)
+  authProvider.tokens = async () => {
+    const gcloudToken = await getGcloudAccessToken()
+    if (gcloudToken) {
+      return {
+        access_token: gcloudToken,
+        token_type: 'Bearer',
+      }
+    }
+    return originalTokensMethod()
+  }
 
   // Create the STDIO transport for local connections
   const localTransport = new StdioServerTransport()

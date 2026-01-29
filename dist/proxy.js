@@ -113,17 +113,28 @@ var StdioServerTransport = class {
 // src/proxy.ts
 import { exec } from "child_process";
 import { promisify } from "util";
+import { GoogleAuth } from "google-auth-library";
 var execAsync = promisify(exec);
+var auth = new GoogleAuth({
+  scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+});
 async function getGcloudAccessToken() {
   try {
-    const { stdout } = await execAsync("gcloud auth application-default print-access-token");
-    return stdout.trim();
+    const client = await auth.getClient();
+    const token = await client.getAccessToken();
+    return token.token || null;
   } catch (error) {
     log("Error fetching gcloud token:", error);
     return null;
   }
 }
 async function getGcloudProjectId() {
+  try {
+    const projectId = await auth.getProjectId();
+    return projectId;
+  } catch (error) {
+    log("Error fetching gcloud project:", error);
+  }
   try {
     const { stdout } = await execAsync("gcloud config get core/project");
     return stdout.trim();
@@ -134,14 +145,6 @@ async function getGcloudProjectId() {
 }
 async function runProxy(serverUrl, callbackPort, headers, transportStrategy = "http-first", host, staticOAuthClientMetadata, staticOAuthClientInfo, authorizeResource, ignoredTools, authTimeoutMs, serverUrlHash) {
   const events = new EventEmitter();
-  try {
-    const token = await getGcloudAccessToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-  } catch (error) {
-    log("Failed to set Authorization header from gcloud:", error);
-  }
   try {
     const projectId = await getGcloudProjectId();
     if (projectId) {
@@ -177,6 +180,17 @@ async function runProxy(serverUrl, callbackPort, headers, transportStrategy = "h
     protectedResourceMetadata: discoveryResult.protectedResourceMetadata,
     wwwAuthenticateScope: discoveryResult.wwwAuthenticateScope
   });
+  const originalTokensMethod = authProvider.tokens.bind(authProvider);
+  authProvider.tokens = async () => {
+    const gcloudToken = await getGcloudAccessToken();
+    if (gcloudToken) {
+      return {
+        access_token: gcloudToken,
+        token_type: "Bearer"
+      };
+    }
+    return originalTokensMethod();
+  };
   const localTransport = new StdioServerTransport();
   let server = null;
   const authInitializer = async () => {
